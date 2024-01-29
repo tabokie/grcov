@@ -45,8 +45,11 @@ pub fn run_with_stdin(
     let output = child.wait_with_output().map_err(err_fn)?;
     if !output.status.success() {
         return Err(format!(
-            "Failure while running {:?}\n{}",
+            "Failure while running {:?} with stdin {}: {}\nstdout: {}\nstderr: {}",
             command,
+            stdin.as_ref(),
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         ));
     }
@@ -89,13 +92,16 @@ pub fn profraws_to_lcov(
         profdata_path.as_ref(),
     ];
 
-    let stdin_paths: String = profraw_paths.iter().fold("".into(), |mut a, x| {
-        a.push_str(x.to_string_lossy().as_ref());
-        a.push('\n');
-        a
-    });
-
-    get_profdata_path().and_then(|p| run_with_stdin(p, &stdin_paths, &args))?;
+    let bin_path = get_profdata_path()?;
+    // Too much files all at once might OOM.
+    for paths in profraw_paths.chunks(100) {
+        let paths_as_input: String = paths.iter().fold("".into(), |mut a, x| {
+            a.push_str(x.to_string_lossy().as_ref());
+            a.push('\n');
+            a
+        });
+        run_with_stdin(&bin_path, paths_as_input, &args)?;
+    }
 
     let metadata = fs::metadata(binary_path)
         .unwrap_or_else(|e| panic!("Failed to open directory '{:?}': {:?}.", binary_path, e));
