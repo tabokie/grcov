@@ -83,19 +83,54 @@ pub fn profraws_to_lcov(
 ) -> Result<Vec<Vec<u8>>, String> {
     let profdata_path = working_dir.join("grcov.profdata");
 
-    let args = vec![
-        "merge".as_ref(),
-        "-f".as_ref(),
-        "-".as_ref(),
-        "-sparse".as_ref(),
-        "-o".as_ref(),
-        profdata_path.as_ref(),
-    ];
-
     let bin_path = get_profdata_path()?;
     // Too much files all at once might OOM.
-    for paths in profraw_paths.chunks(100) {
-        let paths_as_input: String = paths.iter().fold("".into(), |mut a, x| {
+    if profraw_paths.len() > 100 {
+        let mut tmp_files = Vec::new();
+        for (idx, paths) in profraw_paths.chunks(100).enumerate() {
+            let paths_as_input: String = paths.iter().fold("".into(), |mut a, x| {
+                a.push_str(x.to_string_lossy().as_ref());
+                a.push('\n');
+                a
+            });
+            tmp_files.push(working_dir.join(&format!("grcov.profraw.{}", idx)));
+            let args = vec![
+                "merge".as_ref(),
+                "-f".as_ref(),
+                "-".as_ref(),
+                "-sparse".as_ref(),
+                "-o".as_ref(),
+                tmp_files.last().unwrap().as_ref(),
+            ];
+            run_with_stdin(&bin_path, paths_as_input, &args)?;
+        }
+        let args = vec![
+            "merge".as_ref(),
+            "-f".as_ref(),
+            "-".as_ref(),
+            "-sparse".as_ref(),
+            "-o".as_ref(),
+            profdata_path.as_ref(),
+        ];
+        let paths_as_input: String = tmp_files.iter().fold("".into(), |mut a, x| {
+            a.push_str(x.to_string_lossy().as_ref());
+            a.push('\n');
+            a
+        });
+        run_with_stdin(&bin_path, paths_as_input, &args)?;
+        for f in tmp_files {
+            let _ = fs::remove_file(f);
+        }
+    } else {
+        let args = vec![
+            "merge".as_ref(),
+            "-f".as_ref(),
+            "-".as_ref(),
+            "-sparse".as_ref(),
+            "-o".as_ref(),
+            profdata_path.as_ref(),
+        ];
+        let paths_as_input: String = profraw_paths.iter().fold("".into(), |mut a, x| {
             a.push_str(x.to_string_lossy().as_ref());
             a.push('\n');
             a
