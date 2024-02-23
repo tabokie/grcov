@@ -85,9 +85,10 @@ pub fn profraws_to_lcov(
 
     let bin_path = get_profdata_path()?;
     // Too much files all at once might OOM.
-    if profraw_paths.len() > 100 {
+    const MAX_FILES: usize = 400;
+    if profraw_paths.len() > MAX_FILES {
         let mut tmp_files = Vec::new();
-        for (idx, paths) in profraw_paths.chunks(100).enumerate() {
+        for (idx, paths) in profraw_paths.chunks(MAX_FILES).enumerate() {
             let paths_as_input: String = paths.iter().fold("".into(), |mut a, x| {
                 a.push_str(x.to_string_lossy().as_ref());
                 a.push('\n');
