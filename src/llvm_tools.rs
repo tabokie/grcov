@@ -85,62 +85,25 @@ pub fn profraws_to_lcov(
 
     let bin_path = get_profdata_path()?;
     // Too much files all at once might OOM.
-    let max_files = std::env::var("GRCOV_MERGE_FILES_CHUNK")
+    let threads = std::env::var("GRCOV_MERGE_FILES_THREADS")
         .map(|s| s.parse::<usize>().unwrap())
-        .unwrap_or(400);
-    if profraw_paths.len() > max_files {
-        let mut tmp_files = Vec::new();
-        for (idx, paths) in profraw_paths.chunks(max_files).enumerate() {
-            let paths_as_input: String = paths.iter().fold("".into(), |mut a, x| {
-                a.push_str(x.to_string_lossy().as_ref());
-                a.push('\n');
-                a
-            });
-            tmp_files.push(working_dir.join(&format!("grcov.profraw.{}", idx)));
-            let args = vec![
-                "merge".as_ref(),
-                "-f".as_ref(),
-                "-".as_ref(),
-                "-sparse".as_ref(),
-                "-o".as_ref(),
-                tmp_files.last().unwrap().as_ref(),
-            ];
-            run_with_stdin(&bin_path, paths_as_input, &args)?;
-        }
-        let args = vec![
-            "merge".as_ref(),
-            "-f".as_ref(),
-            "-".as_ref(),
-            "-sparse".as_ref(),
-            "-o".as_ref(),
-            profdata_path.as_ref(),
-        ];
-        let paths_as_input: String = tmp_files.iter().fold("".into(), |mut a, x| {
-            a.push_str(x.to_string_lossy().as_ref());
-            a.push('\n');
-            a
-        });
-        run_with_stdin(&bin_path, paths_as_input, &args)?;
-        for f in tmp_files {
-            let _ = fs::remove_file(f);
-        }
-    } else {
-        let args = vec![
-            "merge".as_ref(),
-            "-f".as_ref(),
-            "-".as_ref(),
-            "-sparse".as_ref(),
-            "-o".as_ref(),
-            profdata_path.as_ref(),
-        ];
-        let paths_as_input: String = profraw_paths.iter().fold("".into(), |mut a, x| {
-            a.push_str(x.to_string_lossy().as_ref());
-            a.push('\n');
-            a
-        });
-        run_with_stdin(&bin_path, paths_as_input, &args)?;
-    }
-
+        .unwrap_or(16);
+    let threads_arg = format!("--num-threads={threads}");
+    let args = vec![
+        "merge".as_ref(),
+        "-f".as_ref(),
+        "-".as_ref(),
+        "-sparse".as_ref(),
+        "-o".as_ref(),
+        profdata_path.as_ref(),
+        threads_arg.as_ref(),
+    ];
+    let paths_as_input: String = profraw_paths.iter().fold("".into(), |mut a, x| {
+        a.push_str(x.to_string_lossy().as_ref());
+        a.push('\n');
+        a
+    });
+    run_with_stdin(&bin_path, paths_as_input, &args)?;
     let metadata = fs::metadata(binary_path)
         .unwrap_or_else(|e| panic!("Failed to open directory '{:?}': {:?}.", binary_path, e));
 
