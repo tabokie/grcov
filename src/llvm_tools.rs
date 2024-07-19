@@ -89,23 +89,19 @@ pub fn profraws_to_lcov(
         .map(|s| s.parse::<usize>().unwrap())
         .unwrap_or(16);
     let threads_arg = format!("--num-threads={threads}");
-    let args = vec![
+    let mut args = vec![
         "merge".as_ref(),
-        "-f".as_ref(),
-        "-".as_ref(),
         "-sparse".as_ref(),
         "-o".as_ref(),
         profdata_path.as_ref(),
         threads_arg.as_ref(),
     ];
-    let paths_as_input: String = profraw_paths.iter().fold("".into(), |mut a, x| {
-        a.push_str(x.to_string_lossy().as_ref());
-        a.push('\n');
-        a
-    });
+    for p in profraw_paths {
+        args.push(p.as_os_str());
+    }
     let start = std::time::Instant::now();
     println!("start to run: {:?}", args);
-    run_with_stdin(&bin_path, paths_as_input, &args)?;
+    run(&bin_path, &args)?;
     println!("finished: {}", start.elapsed().as_secs_f64());
     let metadata = fs::metadata(binary_path)
         .unwrap_or_else(|e| panic!("Failed to open directory '{:?}': {:?}.", binary_path, e));
@@ -125,7 +121,11 @@ pub fn profraws_to_lcov(
                 continue;
             }
             // Filter out build artifacts.
-            if entry.path().to_str().map_or(false, |s| s.contains("target/debug/build")) {
+            if entry
+                .path()
+                .to_str()
+                .map_or(false, |s| s.contains("target/debug/build"))
+            {
                 continue;
             }
 
@@ -139,35 +139,22 @@ pub fn profraws_to_lcov(
     println!("finished: {}", start.elapsed().as_secs_f64());
 
     let start = std::time::Instant::now();
-    println!("start to export lcov");
-    let cov_tool_path = get_cov_path()?;
-    let results = binaries
-        .into_par_iter()
-        .filter_map(|binary| {
-            let args = [
-                "export".as_ref(),
-                binary.as_ref(),
-                "--instr-profile".as_ref(),
-                profdata_path.as_ref(),
-                "--format".as_ref(),
-                "lcov".as_ref(),
-            ];
-
-            match run(&cov_tool_path, &args) {
-                Ok(result) => Some(result),
-                Err(err_str) => {
-                    warn!(
-                        "Suppressing error returned by llvm-cov tool for binary {:?}\n{}",
-                        binary, err_str
-                    );
-                    None
-                }
-            }
-        })
-        .collect::<Vec<_>>();
+    let mut export_args = vec![
+        "export".as_ref(),
+        "--instr-profile".as_ref(),
+        profdata_path.as_ref(),
+        "--format".as_ref(),
+        "lcov".as_ref(),
+        r"--ignore-filename-regex='^artifactory-zjk\.k8s\.metabit-trading\.com|^.+-[a-f0-9]{16}|^/rustc/|^src/proto/|^target/|^src/client/python_lib/|^src/client/cpp_lib/|^benchmark/|^tests/fuzz/'".as_ref(),
+    ];
+    for path in &binaries {
+        export_args.push("--object".as_ref());
+        export_args.push(path.as_os_str());
+    }
+    println!("start to export lcov: {export_args:?}");
+    let result = run(&get_cov_path()?, &export_args)?;
     println!("finished: {}", start.elapsed().as_secs_f64());
-
-    Ok(results)
+    Ok(vec![result])
 }
 
 fn get_profdata_path() -> Result<PathBuf, String> {
