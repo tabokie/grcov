@@ -103,10 +103,15 @@ pub fn profraws_to_lcov(
         a.push('\n');
         a
     });
+    let start = std::time::Instant::now();
+    println!("start to run: {:?}", args);
     run_with_stdin(&bin_path, paths_as_input, &args)?;
+    println!("finished: {}", start.elapsed().as_secs_f64());
     let metadata = fs::metadata(binary_path)
         .unwrap_or_else(|e| panic!("Failed to open directory '{:?}': {:?}.", binary_path, e));
 
+    let start = std::time::Instant::now();
+    println!("start to list binaries");
     let binaries = if metadata.is_file() {
         vec![binary_path.to_owned()]
     } else {
@@ -115,6 +120,14 @@ pub fn profraws_to_lcov(
         for entry in WalkDir::new(binary_path).follow_links(true) {
             let entry = entry
                 .unwrap_or_else(|e| panic!("Failed to open directory '{:?}': {}", binary_path, e));
+            // Filter out .so files.
+            if entry.path().extension().map_or(false, |x| x == "so") {
+                continue;
+            }
+            // Filter out build artifacts.
+            if entry.path().to_str().map_or(false, |s| s.contains("target/debug/build")) {
+                continue;
+            }
 
             if is_binary(entry.path()) && entry.metadata().unwrap().len() > 0 {
                 paths.push(entry.into_path());
@@ -123,7 +136,10 @@ pub fn profraws_to_lcov(
 
         paths
     };
+    println!("finished: {}", start.elapsed().as_secs_f64());
 
+    let start = std::time::Instant::now();
+    println!("start to export lcov");
     let cov_tool_path = get_cov_path()?;
     let results = binaries
         .into_par_iter()
@@ -149,6 +165,7 @@ pub fn profraws_to_lcov(
             }
         })
         .collect::<Vec<_>>();
+    println!("finished: {}", start.elapsed().as_secs_f64());
 
     Ok(results)
 }
