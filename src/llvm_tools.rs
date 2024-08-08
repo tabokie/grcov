@@ -100,7 +100,7 @@ pub fn profraws_to_lcov(
         args.push(p.as_os_str());
     }
     let start = std::time::Instant::now();
-    println!("start to run: {:?}", args);
+    println!("start to merge profraw");
     run(&bin_path, &args)?;
     println!("finished: {}", start.elapsed().as_secs_f64());
     let metadata = fs::metadata(binary_path)
@@ -151,7 +151,7 @@ pub fn profraws_to_lcov(
         export_args.push("--object".as_ref());
         export_args.push(path.as_os_str());
     }
-    println!("start to export lcov: {export_args:?}");
+    println!("start to export lcov");
     let result = run(&get_cov_path()?, &export_args)?;
     println!("finished: {}", start.elapsed().as_secs_f64());
     Ok(vec![result])
